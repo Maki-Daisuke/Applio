@@ -48,7 +48,7 @@ class RealtimeVoiceConverter:
             weight_root (str): Path to the model weights.
         """
         self.cpt = (
-            torch.load(weight_root, map_location="cpu", weights_only=True)
+            torch.load(weight_root, map_location="cpu", weights_only=False)
             if os.path.isfile(weight_root)
             else None
         )

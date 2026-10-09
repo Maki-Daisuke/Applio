@@ -373,7 +373,7 @@ def run(
         chk_path = latest_checkpoint_path(experiment_dir, "G_*.pth")
 
         if chk_path:
-            ckpt = torch.load(chk_path, map_location="cpu", weights_only=True)
+            ckpt = torch.load(chk_path, map_location="cpu", weights_only=False)
             spk_dim = ckpt["model"]["emb_g.weight"].shape[0]
             print(f"Saved generator has {spk_dim} speakers.")
             del ckpt
@@ -471,7 +471,7 @@ def run(
             if rank == 0:
                 print(f"Loaded pretrained (G) '{pretrainG}'")
             try:
-                ckpt = torch.load(pretrainG, map_location="cpu", weights_only=True)[
+                ckpt = torch.load(pretrainG, map_location="cpu", weights_only=False)[
                     "model"
                 ]
                 print(
@@ -495,7 +495,7 @@ def run(
             if rank == 0:
                 print(f"Loaded pretrained (D) '{pretrainD}'")
             try:
-                ckpt = torch.load(pretrainD, map_location="cpu", weights_only=True)[
+                ckpt = torch.load(pretrainD, map_location="cpu", weights_only=False)[
                     "model"
                 ]
                 if hasattr(net_d, "module"):

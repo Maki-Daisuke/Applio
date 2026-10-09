@@ -253,7 +253,7 @@ def get_speakers_id(model):
     if model:
         try:
             model_data = torch.load(
-                os.path.join(now_dir, model), map_location="cpu", weights_only=True
+                os.path.join(now_dir, model), map_location="cpu", weights_only=False
             )
             speakers_id = model_data.get("speakers_id")
             if speakers_id:
