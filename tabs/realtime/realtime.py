@@ -1019,7 +1019,7 @@ def realtime_tab():
                             )
                             input_audio_gain = gr.Slider(
                                 minimum=0,
-                                maximum=200,
+                                maximum=1000,
                                 value=100,
                                 label=i18n("Input Gain (%)"),
                                 info=i18n(
@@ -1058,7 +1058,7 @@ def realtime_tab():
                             )
                             output_audio_gain = gr.Slider(
                                 minimum=0,
-                                maximum=200,
+                                maximum=1000,
                                 value=100,
                                 label=i18n("Output Gain (%)"),
                                 info=i18n(
@@ -1108,7 +1108,7 @@ def realtime_tab():
                         )
                         monitor_audio_gain = gr.Slider(
                             minimum=0,
-                            maximum=200,
+                            maximum=1000,
                             value=100,
                             label=i18n("Monitor Gain (%)"),
                             info=i18n(
