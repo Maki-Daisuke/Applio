@@ -37,7 +37,7 @@ class Config:
     def load_config_json(self):
         configs = {}
         for config_file in version_config_paths:
-            config_path = os.path.join("rvc", "configs", config_file)
+            config_path = os.path.join(os.path.dirname(__file__), config_file)
             with open(config_path, "r", encoding="utf-8") as f:
                 configs[config_file] = json.load(f)
         return configs
@@ -62,6 +62,34 @@ class Config:
         self.gpu_mem = torch.cuda.get_device_properties(i_device).total_memory // (
             1024**3
         )
+        if (
+            getattr(torch.version, "hip", None) is not None
+            or "AMD" in self.gpu_name.upper()
+            or "RADEON" in self.gpu_name.upper()
+            or self.gpu_name.endswith("[ZLUDA]")
+        ):
+            torch.backends.cudnn.enabled = False
+            torch.backends.cudnn.benchmark = False
+            try:
+                torch.backends.cuda.enable_flash_sdp(False)
+                torch.backends.cuda.enable_math_sdp(True)
+                torch.backends.cuda.enable_mem_efficient_sdp(False)
+            except Exception:
+                pass
+        try:
+            from rvc.lib.tools.gpu_checker import check_torch_compatibility
+
+            compat, msg, legacy = check_torch_compatibility()
+            if legacy and not compat:
+                print(
+                    f"\n[!] WARNING: Incompatible PyTorch version for {self.gpu_name}."
+                )
+                print(f"[!] {msg}")
+                print(
+                    "[!] Run 'applio downgrade-torch' or 'python core.py downgrade-torch' to install PyTorch 2.7.1 (cu126) for older GPU support.\n"
+                )
+        except Exception:
+            pass
 
 
 def max_vram_gpu(gpu):
