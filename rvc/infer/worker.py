@@ -3,6 +3,7 @@ import sys
 
 if sys.platform == "darwin":
     os.environ.setdefault("OMP_NUM_THREADS", "1")
+    os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
 
 import json
 import traceback
@@ -238,7 +239,9 @@ def run_worker():
                 kwargs["model_path"] = kwargs.pop("pth_path", "")
 
                 vc.convert_audio(**kwargs)
-                final_out = output_path.replace(".wav", f".{export_format.lower()}")
+                final_out = (
+                    os.path.splitext(output_path)[0] + f".{export_format.lower()}"
+                )
                 info_msg = f"File {input_path} inferred successfully."
                 sys.stdout.flush()
                 send_ipc(
@@ -318,8 +321,9 @@ def run_worker():
                     kwargs["model_path"] = kwargs.pop("pth_path", "")
                     vc.convert_audio(**kwargs)
                     export_format = kwargs.get("export_format", "WAV")
-                    final_out = output_rvc_path.replace(
-                        ".wav", f".{export_format.lower()}"
+                    final_out = (
+                        os.path.splitext(output_rvc_path)[0]
+                        + f".{export_format.lower()}"
                     )
                     print(f"TTS RVC conversion completed at '{final_out}'")
 

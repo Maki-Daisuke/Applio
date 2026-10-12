@@ -4,6 +4,8 @@ import json
 import multiprocessing as mp
 import os
 import sys
+if sys.platform == "darwin":
+    os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
 import time
 
 import numpy as np
@@ -49,7 +51,7 @@ class FeatureInput:
         ):
             torch.backends.cudnn.enabled = False
             torch.backends.cudnn.benchmark = False
-        if f0_method in ("crepe", "crepe-tiny"):
+        if f0_method == "crepe":
             self.model = CREPE(
                 device=self.device, sample_rate=self.sample_rate, hop_size=self.hop_size
             )
@@ -79,8 +81,6 @@ class FeatureInput:
     def compute_f0(self, x, p_len=None):
         if self.f0_method == "crepe":
             f0 = self.model.get_f0(x, self.f0_min, self.f0_max, p_len, "full")
-        elif self.f0_method == "crepe-tiny":
-            f0 = self.model.get_f0(x, self.f0_min, self.f0_max, p_len, "tiny")
         elif self.f0_method == "rmvpe":
             f0 = self.model.get_f0(x, filter_radius=0.03)
         elif self.f0_method == "fcpe":
@@ -117,7 +117,7 @@ class FeatureInput:
             try:
                 feature_pit = self.compute_f0(np_arr)
             except Exception as gpu_err:
-                if str(self.device).startswith("cuda"):
+                if str(self.device).startswith("cuda") or str(self.device) == "mps":
                     print(
                         f"[!] GPU pitch extraction failed for {inp_path} on {self.device} ({gpu_err}). Falling back to CPU..."
                     )
@@ -147,7 +147,14 @@ def process_files(files, f0_method, device, threads):
     ):
         torch.backends.cudnn.enabled = False
         torch.backends.cudnn.benchmark = False
-    fe = FeatureInput(f0_method=f0_method, device=device)
+    try:
+        fe = FeatureInput(f0_method=f0_method, device=device)
+    except (RuntimeError, NotImplementedError, TypeError) as error:
+        from rvc.lib.tools.device import is_mps_error
+        if str(device) != "mps" or not is_mps_error(error):
+            raise
+        print(f"[!] MPS pitch setup failed ({error}); continuing on CPU.")
+        fe = FeatureInput(f0_method=f0_method, device="cpu")
     with tqdm.tqdm(total=len(files), leave=True) as pbar:
         for file_info in files:
             fe.process_file(file_info)
@@ -210,11 +217,21 @@ def process_file_embedding(
     ):
         torch.backends.cudnn.enabled = False
         torch.backends.cudnn.benchmark = False
-    model = load_embedding(embedder_model, embedder_model_custom).to(device).float()
+    model = load_embedding(embedder_model, embedder_model_custom).float()
+    try:
+        model = model.to(device)
+    except (RuntimeError, NotImplementedError, TypeError) as error:
+        from rvc.lib.tools.device import is_mps_error
+        if str(device) != "mps" or not is_mps_error(error):
+            raise
+        print(f"[!] MPS embedding setup failed ({error}); continuing on CPU.")
+        device = "cpu"
+        model = model.to(device)
     model.eval()
-    n_threads = max(1, n_threads)
+    n_threads = 1 if str(device) == "mps" else max(1, n_threads)
 
     def worker(file_info):
+        nonlocal device
         wav_file_path, _, _, out_file_path = file_info
         if os.path.exists(out_file_path):
             return
@@ -225,7 +242,16 @@ def process_file_embedding(
         )
         feats = feats.view(1, -1)
         with torch.no_grad():
-            result = model(feats)["last_hidden_state"]
+            try:
+                result = model(feats)["last_hidden_state"]
+            except (RuntimeError, NotImplementedError, TypeError) as error:
+                from rvc.lib.tools.device import is_mps_error
+                if str(device) != "mps" or not is_mps_error(error):
+                    raise
+                print(f"[!] MPS embedding extraction failed ({error}); continuing on CPU.")
+                device = "cpu"
+                model.to(device)
+                result = model(feats.to(device))["last_hidden_state"]
         feats_out = result.squeeze(0).float().cpu().numpy()
         if not np.isnan(feats_out).any():
             np.save(out_file_path, feats_out, allow_pickle=False)
@@ -235,7 +261,8 @@ def process_file_embedding(
     with tqdm.tqdm(total=len(files), leave=True, position=device_num) as pbar:
         with concurrent.futures.ThreadPoolExecutor(max_workers=n_threads) as executor:
             futures = [executor.submit(worker, f) for f in files]
-            for _ in concurrent.futures.as_completed(futures):
+            for result in concurrent.futures.as_completed(futures):
+                result.result()
                 pbar.update(1)
 
 
@@ -323,7 +350,14 @@ if __name__ == "__main__":
         )
         sys.exit(1)
 
-    devices = ["cpu"] if gpus == "-" else [f"cuda:{idx}" for idx in gpus.split("-")]
+    if gpus == "-":
+        devices = ["cpu"]
+    elif torch.cuda.is_available():
+        devices = [f"cuda:{idx}" for idx in gpus.split("-")]
+    elif torch.backends.mps.is_available():
+        devices = ["mps"]
+    else:
+        devices = ["cpu"]
 
     try:
         run_pitch_extraction(files, devices, f0_method, num_processes)

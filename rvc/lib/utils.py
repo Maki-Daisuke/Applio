@@ -8,7 +8,7 @@ import soundfile as sf
 import numpy as np
 import re
 import unicodedata
-import wget
+from rvc.lib.tools.http_download import download_http
 from torch import nn
 
 import logging
@@ -31,6 +31,27 @@ _HubertModelWithFinalProj = None
 def get_hubert_model_class():
     global _HubertModelWithFinalProj
     if _HubertModelWithFinalProj is None:
+        # HuBERT is audio-only, but Transformers also probes optional vision
+        # packages. Some ROCm wheels leave torchvision installed without its
+        # native operators; do not let that unrelated dependency block audio.
+        from transformers import utils as transformers_utils
+        from transformers.utils import import_utils
+
+        if import_utils.is_torchvision_available():
+            try:
+                import torchvision
+            except (ImportError, OSError, RuntimeError) as error:
+                logging.getLogger(__name__).warning(
+                    "Ignoring unavailable optional torchvision for HuBERT: %s", error
+                )
+                import_utils._torchvision_available = False
+                import_utils.is_torchvision_available = lambda: False
+                import_utils.is_torchvision_v2_available = lambda: False
+                # Transformers re-exports these checks from utils, and image
+                # modules may import that alias rather than import_utils.
+                transformers_utils.is_torchvision_available = lambda: False
+                transformers_utils.is_torchvision_v2_available = lambda: False
+
         from transformers import HubertModel
 
         class _RealHubertModelWithFinalProj(HubertModel):
@@ -200,11 +221,11 @@ def load_embedding(embedder_model, custom_embedder=None):
         if not os.path.exists(bin_file):
             url = online_embedders[embedder_model]
             print(f"Downloading {url} to {model_path}...")
-            wget.download(url, out=bin_file)
+            download_http(url, bin_file)
         if not os.path.exists(json_file):
             url = config_files[embedder_model]
             print(f"Downloading {url} to {model_path}...")
-            wget.download(url, out=json_file)
+            download_http(url, json_file)
 
     models = HubertModelWithFinalProj.from_pretrained(model_path)
     return models

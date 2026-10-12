@@ -1,11 +1,11 @@
 import json
 import os
-import shutil
 import subprocess
 import sys
 
 if sys.platform == "darwin":
     os.environ.setdefault("OMP_NUM_THREADS", "1")
+    os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
 elif sys.platform == "win32":
     # Ensure virtualenv Scripts and torch DLL directories are accessible
     # for dynamic loading of ROCm and runtime libraries
@@ -927,7 +927,6 @@ def _infer_opts(func):
             type=click.Choice(
                 [
                     "crepe",
-                    "crepe-tiny",
                     "rmvpe",
                     "fcpe",
                     "hybrid[crepe+rmvpe]",
@@ -1273,7 +1272,7 @@ def preprocess(**kwargs):
 @click.option("--model-name", required=True, help="Name of the model.")
 @click.option(
     "--f0-method",
-    type=click.Choice(["crepe", "crepe-tiny", "rmvpe", "fcpe"]),
+    type=click.Choice(["crepe", "rmvpe", "fcpe"]),
     default="rmvpe",
     help="Pitch extraction method.",
 )
