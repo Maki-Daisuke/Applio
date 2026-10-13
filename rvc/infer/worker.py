@@ -82,6 +82,8 @@ def map_params(params: dict, input_path: str, output_path: str) -> dict:
         "volume_envelope": float(params.get("volumeEnvelope", 1.0)),
         "protect": float(params.get("protect", 0.5)),
         "f0_method": str(params.get("f0Method", "rmvpe")),
+        "inference_engine": params.get("inferenceEngine", "torch"),
+        "onnx_precision": params.get("onnxPrecision", "auto"),
         "input_path": input_path,
         "output_path": output_path,
         "pth_path": params.get("pthPath", ""),
@@ -112,18 +114,18 @@ def map_params(params: dict, input_path: str, output_path: str) -> dict:
         "delay": to_bool(params.get("delay", False)),
         "reverb_room_size": float(params.get("reverbRoomSize", 0.5)),
         "reverb_damping": float(params.get("reverbDamping", 0.5)),
-        "reverb_wet_gain": float(params.get("reverbWetGain", 0.33)),
-        "reverb_dry_gain": float(params.get("reverbDryGain", 0.4)),
+        "reverb_wet_level": float(params.get("reverbWetGain", 0.33)),
+        "reverb_dry_level": float(params.get("reverbDryGain", 0.4)),
         "reverb_width": float(params.get("reverbWidth", 1.0)),
         "reverb_freeze_mode": float(params.get("reverbFreezeMode", 0.0)),
         "pitch_shift_semitones": float(params.get("pitchShiftSemitones", 0.0)),
         "limiter_threshold": float(params.get("limiterThreshold", -6.0)),
-        "limiter_release_time": float(params.get("limiterReleaseTime", 0.05)),
+        "limiter_release": float(params.get("limiterReleaseTime", 0.05)),
         "gain_db": float(params.get("gainDb", 0.0)),
         "distortion_gain": float(params.get("distortionGain", 25.0)),
         "chorus_rate": float(params.get("chorusRate", 1.0)),
         "chorus_depth": float(params.get("chorusDepth", 0.25)),
-        "chorus_center_delay": float(params.get("chorusCenterDelay", 7.0)),
+        "chorus_delay": float(params.get("chorusCenterDelay", 7.0)),
         "chorus_feedback": float(params.get("chorusFeedback", 0.0)),
         "chorus_mix": float(params.get("chorusMix", 0.5)),
         "bitcrush_bit_depth": int(params.get("bitcrushBitDepth", 8)),
@@ -279,6 +281,28 @@ def run_worker():
             elif cmd == "tts":
                 import asyncio
                 import edge_tts
+
+                # Fix edge-tts 403 (rany2/edge-tts#490): redirect synthesis
+                # to api.msedgeservices.com before connecting.
+                try:
+                    from rvc.lib.tools.edge_tts_patch import apply_edge_tts_fix
+
+                    apply_edge_tts_fix()
+                except ImportError:
+                    # Last-resort inline patch if the helper is unreachable.
+                    try:
+                        import edge_tts.communicate as _comm
+                        import edge_tts.constants as _const
+
+                        _new_wss = (
+                            "wss://api.msedgeservices.com/tts/cognitiveservices"
+                            "/websocket/v1"
+                            f"?Ocp-Apim-Subscription-Key={_const.TRUSTED_CLIENT_TOKEN}"
+                        )
+                        _const.WSS_URL = _new_wss
+                        _comm.WSS_URL = _new_wss
+                    except Exception:
+                        pass
 
                 tts_text = req.get("ttsText", "")
                 tts_file = req.get("ttsFile", "")
